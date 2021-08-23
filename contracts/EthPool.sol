@@ -14,11 +14,17 @@ contract EthPool is Ownable {
   uint256 public totalDeposit;
   mapping (address => uint256) public deposits;
   mapping (address => uint256) public rewards;
+  mapping (address => bool) public isDeposited;
 
   event DepositETH(address indexed user, uint256 amount);
   event DepositReward(address indexed team, uint256 amount);
   event Withdraw(address indexed team, uint256 amount);
   
+  modifier onlyTeam() {
+    require(msg.sender == team, 'EthPool: INSUFFICIENT PERMISSION');
+      _;
+  }
+
   constructor (address _team) {
     team = _team;
   }
@@ -27,19 +33,11 @@ contract EthPool is Ownable {
     team = _team;
   }
 
-  function _checkUserExisted(address _user) internal view returns (bool) {
-    for (uint i; i < users.length; i++) {
-      if (users[i] == _user) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   function depositETH() external payable {
     require(msg.sender != team, 'EthPool: INSUFFICIENT PERMISSION');
-    if (!_checkUserExisted(msg.sender)) {
+    if (!isDeposited[msg.sender]) {
       users.push(msg.sender);
+      isDeposited[msg.sender] = true;
     }
 
     deposits[msg.sender] = deposits[msg.sender].add(msg.value);
@@ -48,8 +46,7 @@ contract EthPool is Ownable {
     emit DepositETH(msg.sender, msg.value);
   }
 
-  function depositReward() external payable {
-    require(msg.sender == team, 'EthPool: INSUFFICIENT PERMISSION');
+  function depositReward() external payable onlyTeam {
 
     for (uint i; i < users.length; i++) {
       uint256 reward = msg.value.mul(deposits[users[i]]).div(totalDeposit);
@@ -79,6 +76,7 @@ contract EthPool is Ownable {
 
     deposits[_user] = 0;
     rewards[_user] = 0;
+    isDeposited[msg.sender] = false;
   }
 
   function withdraw() external {
@@ -86,10 +84,9 @@ contract EthPool is Ownable {
     uint256 amount = availableAmount(msg.sender);
     
     require(amount > 0, 'EthPool: NO BALANCE');
+    _removeUser(msg.sender);
     (bool success, ) = msg.sender.call{ value: amount}("");
     require(success, 'Address: unable to send value, recipient may have reverted');
-
-    _removeUser(msg.sender);
 
     emit Withdraw(msg.sender, amount);
   }
